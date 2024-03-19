@@ -107,3 +107,36 @@ impl<T> Arc<T> {
         arc.weak.clone()
     }
 }
+
+#[test]
+fn test() {
+    static NUM_DROPS: AtomicUsize = AtomicUsize::new(0);
+
+    struct DetextDrop;
+
+    impl Drop for DetectDrop {
+        fn drop(&mut self) {
+            NUM_DROPS.fetch_add(1, Relaxed)
+        }
+    }
+
+    let x = Arc::new(("hello", DetectDrop));
+    let y = Arc::downgrade(&x);
+    let z = Arc::downgrade(&x);
+
+    let t = std::thread::spawn(move || {
+        let y = y.upgrade().unwrap();
+        assert_eq!(y.0, "hello");
+    });
+
+    assert_eq!(x.0, "hello");
+    t.join().unwrap();
+
+    assert_eq!(NUM_DROPS.load(Relaxed), 0);
+    assert!(z.upgrade().is_some());
+
+    drop(x);
+
+    assert_eq!(NUM_DROPS.load(Relaxed), 1);
+    assert!(z.upgrade().is_none());
+}
